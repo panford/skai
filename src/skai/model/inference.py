@@ -48,6 +48,7 @@ def main(_) -> None:
       worker_type=FLAGS.worker_type,
       worker_machine_type=FLAGS.worker_machine_type,
       dataflow_service_options=FLAGS.dataflow_service_options
+
   )
 
   inference_lib.run_tf2_inference_with_csv_output(

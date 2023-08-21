@@ -2,14 +2,12 @@
 
 import time
 from typing import Any, Iterator, List, Dict
-
 import apache_beam as beam
 import apache_beam.utils.shared as beam_shared
 import numpy as np
 from skai import utils
 from skai.model import data
 import tensorflow as tf
-import os
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
@@ -261,8 +259,7 @@ def run_tf2_inference_with_csv_output(
     batch_size: Batch size.
     pipeline_options: Dataflow pipeline options.
   """
-  import tensorflow as tf
-  print(tf.config.list_physical_devices("GPU"))
+  
   with beam.Pipeline(options=pipeline_options) as pipeline:
     examples = (
         pipeline
