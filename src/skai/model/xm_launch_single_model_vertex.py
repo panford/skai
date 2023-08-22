@@ -19,39 +19,38 @@ GPU_ACCELERATORS = ["P100", "V100", "P4", "T4", "A100"]
 ACCELERATORS = [*GPU_ACCELERATORS, *TPU_ACCELERATORS]
 
 
-CPU_BASE_IMAGE = "tensorflow/tensorflow:2.9.1"
-
-GPU_BASE_IMAGE = "tensorflow/tensorflow:2.13.0-gpu"
+CPU_BASE_IMAGE = "tensorflow/tensorflow:2.13.0"
+# GPU_BASE_IMAGE = "tensorflow/tensorflow:2.13.0-gpu"
+GPU_BASE_IMAGE = 'nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04'
 
 def construct_docker_instructions(accelerator: str) -> Tuple[str, List[str]]:
     """Returns the required docker instructions and base image for `accelerator`."""
     if accelerator in GPU_ACCELERATORS:
-        # Select a base GPU image. Other options can be found in
-        # https://cloud.google.com/deep-learning-containers/docs/choosing-container
-        base_image = GPU_BASE_IMAGE
-        # Make sure python executable is python3.
-        docker_instructions = [
-           # Add deadsnakes repo
-            'RUN apt update',
-            'RUN apt-get install software-properties-common -y',
-            'RUN add-apt-repository ppa:deadsnakes/ppa -y',
+      base_image = GPU_BASE_IMAGE
+      docker_instructions = [
+      'RUN if ! id 1000; then useradd -m -u 1000 clouduser; fi',
+      'ARG PYTHON_VERSION=3.10',
+      'ENV DEBIAN_FRONTEND=noninteractive',
+      'ENV PATH=/opt/python/bin:/opt/conda/bin:$PATH',
+      'RUN apt-get update',
+      'RUN apt install -y nvidia-cuda-toolkit',
+      'RUN apt-get install -y wget',
+      'RUN rm -rf /var/lib/apt/lists/*',
+      'RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh',
+      'RUN bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda',
+      'RUN rm Miniconda3-latest-Linux-x86_64.sh',
+      'RUN conda create -y -p /opt/python python=$PYTHON_VERSION pip',
+      'RUN conda clean -y --all --force-pkgs-dirs',
+      'RUN pip install --upgrade pip',
+      'RUN pip check',
+      'RUN ln -s $(which pip) /usr/local/bin/pip',
+      # 'WORKDIR /skai',
+      # 'COPY skai/requirements.txt /skai/requirements.txt',
+      # 'RUN pip3 install --upgrade pip',
+      # 'RUN pip3 install --timeout 1000 -r requirements.txt',
+      # 'COPY skai/ /skai',
+      ]
 
-            # Install Python 3.10
-            'RUN apt update && apt install -y python3.10 python3.10-distutils',
-            'RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10',
-
-
-            # Replace python shell with python3.10
-            'RUN unlink /usr/bin/python',
-            'RUN ln -s /usr/bin/python3.10 /usr/bin/python',
-
-            'RUN python -m pip install --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v50 tensorflow==2.13'
-        ]
-        # docker_instructions = [
-        #     "RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/"
-        #     "compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub",
-        #     "RUN apt-get update && apt-get install -y python3-pip wget",
-        # ]
     else:
         # Select a base CPU image. Other options can be found in
         # https://cloud.google.com/deep-learning-containers/docs/choosing-container
@@ -59,15 +58,15 @@ def construct_docker_instructions(accelerator: str) -> Tuple[str, List[str]]:
         docker_instructions = [
             "RUN apt-get update && apt-get install -y python3-pip wget",
         ]
-    docker_instructions += [
-        "RUN apt-get install -y libgl1-mesa-glx libsm6 libxext6 libxrender-dev "
-        "libglib2.0-0 python-is-python3"
-    ]
+    # docker_instructions += [
+    #     "RUN apt-get install -y libgl1-mesa-glx libsm6 libxext6 libxrender-dev "
+    #     "libglib2.0-0 python-is-python3"
+    # ]
     docker_instructions += [
         "WORKDIR /skai",
         "COPY skai/requirements.txt /skai/requirements.txt",
-        "RUN pip install --upgrade pip",
-        "RUN pip install --timeout 1000 -r requirements.txt",
+        "RUN pip3 install --upgrade pip",
+        "RUN pip3 install --timeout 1000 -r requirements.txt",
         "COPY skai/ /skai",
     ]
     return base_image, docker_instructions
@@ -207,7 +206,6 @@ def main(_) -> None:
         docker_instructions=docker_instructions,
         entrypoint=xm.CommandList([
             "pip install /skai/src/.",
-            'pip list',
             "python /skai/src/skai/model/train.py $@"
         ]),
         use_deep_module=True,

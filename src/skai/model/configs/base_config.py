@@ -32,7 +32,7 @@ def get_data_config():
   config = ml_collections.ConfigDict()
   config.name = ''
   config.num_classes = 2
-  config.batch_size = 64
+  config.batch_size = 10
   # Number of slices into which train and val will be split.
   config.num_splits = 5
   # Ratio of splits that will be considered out-of-distribution from each
