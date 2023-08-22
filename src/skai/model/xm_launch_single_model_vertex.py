@@ -286,7 +286,7 @@ def main(_) -> None:
         ),
         study_factory=vizier_cloud.NewStudy(
             study_config=get_study_config()),
-        num_trials_total=2,
+        num_trials_total=4,
         num_parallel_trial_runs=3,
     ).launch()
 
