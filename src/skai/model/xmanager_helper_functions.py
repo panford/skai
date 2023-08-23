@@ -2,7 +2,7 @@ import re
 import time
 import abc
 from absl import logging
-from xmanager import xm
+# from xmanager import xm
 from xmanager.cloud import auth
 from typing import Any, Callable, Dict, Optional
 from google.cloud import aiplatform_v1beta1 as aip
@@ -83,8 +83,8 @@ class VizierController:
 
   def __init__(
       self,
-      experiment: xm.Experiment,
-      work_unit_generator: Callable[[xm.WorkUnit, Dict[str, Any]], Any],
+      experiment, #: xm.Experiment,
+      work_unit_generator, #: Callable[[xm.WorkUnit, Dict[str, Any]], Any],
       vz_client: aip.VizierServiceClient,
       study_name: str,
       num_work_units_total: int,
@@ -175,8 +175,8 @@ class VizierController:
 
       print(f'Creating work unit (index: {i})... \n')
 
-      def create_gen(index: int, trial: aip.Trial) -> xm.JobGeneratorType:
-        async def gen_work_unit(work_unit: xm.WorkUnit, **kwargs):
+      def create_gen(index: int, trial: aip.Trial): # -> xm.JobGeneratorType:
+        async def gen_work_unit(work_unit, **kwargs): #: xm.WorkUnit, **kwargs):
           await self._work_unit_generator(work_unit, kwargs)
 
           # TODO: Add an utility to handle logging conditionally
@@ -206,7 +206,7 @@ class WorkUnitVizierUpdater:
   def __init__(
       self,
       vz_client: aip.VizierServiceClient,
-      work_unit: xm.WorkUnit,
+      work_unit, #: xm.WorkUnit,
       trial: aip.Trial,
   ) -> None:
     self.completed = False
@@ -214,7 +214,7 @@ class WorkUnitVizierUpdater:
     self._work_unit = work_unit
     self._trial = trial
 
-  def work_unit_status(self) -> xm.ExperimentUnitStatus:
+  def work_unit_status(self): # -> xm.ExperimentUnitStatus:
     return self._work_unit.get_status()
 
   def check_for_completion(self) -> None:
@@ -264,8 +264,8 @@ class VizierExploration:
 
   def __init__(
       self,
-      experiment: xm.Experiment,
-      job: xm.JobType,
+      experiment, #: xm.Experiment,
+      job, #: xm.JobType,
       study_factory: StudyFactory,
       num_trials_total: int,
       num_parallel_trial_runs: int,
@@ -281,7 +281,7 @@ class VizierExploration:
     """
 
     async def work_unit_generator(
-        work_unit: xm.WorkUnit, vizier_params: Dict[str, Any]
+        work_unit, vizier_params: Dict[str, Any]
     ):
       work_unit.add(job, self._to_job_params(vizier_params))
 
