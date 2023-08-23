@@ -12,29 +12,83 @@ from google.cloud import aiplatform_v1beta1 as aip
 from ml_collections import config_flags
 from xmanager import xm
 from xmanager import xm_local
-from xmanager.vizier import vizier_cloud
+from xmanager_helper_functions import VizierExploration, NewStudy
+from typing import List, Tuple
+
+
+TPU_ACCELERATORS = ["TPU_V2", "TPU_V3"]
+GPU_ACCELERATORS = ["P100", "V100", "P4", "T4", "A100"]
+ACCELERATORS = [*GPU_ACCELERATORS, *TPU_ACCELERATORS]
+TPU_BASE_IMAGE = "ubuntu:20.04"
+
+CPU_BASE_IMAGE = "tensorflow/tensorflow:2.9.1"
+
+GPU_BASE_IMAGE = "tensorflow/tensorflow:2.13.0-gpu"
 
 TPU_ACCELERATORS = ["TPU_V2", "TPU_V3"]
 GPU_ACCELERATORS = ["P100", "V100", "P4", "T4", "A100"]
 ACCELERATORS = [*GPU_ACCELERATORS, *TPU_ACCELERATORS]
 
-def get_docker_instructions():
-    return [
-        "FROM python:3.10",
-        "RUN pip install tensorflow",
-        "RUN if ! id 1000; then useradd -m -u 1000 clouduser; fi",
 
-        "ENV LANG=C.UTF-8",
-        "RUN rm -f /etc/apt/sources.list.d/cuda.list",
-        "RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -",
-        "RUN apt-get update && apt-get install -y git netcat-traditional",
-        "RUN python -m pip install --upgrade pip",
-        "COPY skai/requirements.txt /skai/requirements.txt",
-        "RUN python -m pip install -r skai/requirements.txt",
-        "COPY skai/ /skai",
-        "RUN chown -R 1000:root /skai && chmod -R 775 /skai",
-        "WORKDIR /skai",
+
+def tpuvm_docker_instructions() -> List[str]:
+    """Returns a list of docker instructions necessary to use TF 2.9.1 on TPUs."""
+    return [
+        "RUN wget "
+        "https://storage.googleapis.com/cloud-tpu-tpuvm-artifacts/libtpu/1.3.0/libtpu.so"
+        " -O /lib/libtpu.so",
+        "RUN chmod 700 /lib/libtpu.so",
+        "RUN wget "
+        "https://storage.googleapis.com/cloud-tpu-tpuvm-artifacts/tensorflow/tf-2.9.1/"
+        "tensorflow-2.9.1-cp38-cp38-linux_x86_64.whl",
+        "RUN pip3 install tensorflow-2.9.1-cp38-cp38-linux_x86_64.whl",
+        "RUN rm tensorflow-2.9.1-cp38-cp38-linux_x86_64.whl",
     ]
+
+
+def construct_docker_instructions(accelerator: str) -> Tuple[str, List[str]]:
+    """Returns the required docker instructions and base image for `accelerator`."""
+    if accelerator in TPU_ACCELERATORS:
+        # Required by TPU vm.
+        base_image = TPU_BASE_IMAGE
+        # Build can get stuck for a while without this line.
+        docker_instructions = [
+            "ENV DEBIAN_FRONTEND=noninteractive",
+        ]
+        # Make sure python executable is python3.
+        docker_instructions += [
+            "RUN apt-get update && apt-get install -y python3-pip wget"
+        ]
+        docker_instructions += tpuvm_docker_instructions()
+    elif accelerator in GPU_ACCELERATORS:
+        # Select a base GPU image. Other options can be found in
+        # https://cloud.google.com/deep-learning-containers/docs/choosing-container
+        base_image = GPU_BASE_IMAGE
+        # Make sure python executable is python3.
+        docker_instructions = [
+            "RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/"
+            "compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub",
+            "RUN apt-get update && apt-get install -y python3-pip wget",
+        ]
+    else:
+        # Select a base CPU image. Other options can be found in
+        # https://cloud.google.com/deep-learning-containers/docs/choosing-container
+        base_image = CPU_BASE_IMAGE
+        docker_instructions = [
+            "RUN apt-get update && apt-get install -y python3-pip wget",
+        ]
+    docker_instructions += [
+        "RUN apt-get install -y libgl1-mesa-glx libsm6 libxext6 libxrender-dev "
+        "libglib2.0-0 python-is-python3"
+    ]
+    docker_instructions += [
+        "WORKDIR /skai",
+        "COPY skai/requirements.txt /skai/requirements.txt",
+        "RUN pip3 install --upgrade pip",
+        "RUN pip3 install --timeout 1000 -r requirements.txt",
+        "COPY skai/ /skai",
+    ]
+    return base_image, docker_instructions
 
 parameter_spec = aip.StudySpec.ParameterSpec
 
@@ -154,17 +208,18 @@ def main(_) -> None:
   config = FLAGS.config
   config_path = config_flags.get_config_filename(FLAGS['config'])
 
+  
   with xm_local.create_experiment(
       experiment_title=(
           f'{FLAGS.experiment_name} {config.data.name}_{config.model.name}'
       )
   ) as experiment:
-
+    base_image, docker_instructions = construct_docker_instructions(FLAGS.accelerator)
     executable_spec = xm.PythonContainer(
         # Package the current directory that this script is in.
         path=os.path.expanduser(FLAGS.project_path),
-        base_image='gcr.io/deeplearning-platform-release/base-gpu',
-        docker_instructions=get_docker_instructions(),
+        base_image=base_image, #'gcr.io/deeplearning-platform-release/base-gpu',
+        docker_instructions=docker_instructions,
         entrypoint=xm.CommandList([
             "pip install /skai/src/.",
             "python /skai/src/skai/model/train.py $@"
@@ -238,16 +293,16 @@ def main(_) -> None:
     job_args['config.training.save_best_model'] = True
     job_args['config.training.num_epochs'] = config.training.num_epochs
 
-    vizier_cloud.VizierExploration(
+    VizierExploration(
         experiment=experiment,
         job=xm.Job(
             executable=train_executable,
             executor=executor,
             args=job_args
         ),
-        study_factory=vizier_cloud.NewStudy(
+        study_factory=NewStudy(
             study_config=get_study_config()),
-        num_trials_total=100,
+        num_trials_total=10,
         num_parallel_trial_runs=3,
     ).launch()
 

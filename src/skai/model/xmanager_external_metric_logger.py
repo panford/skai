@@ -1,13 +1,12 @@
 """Keras callback for logging metrics to XManager."""
 
 from typing import Union
-
-import tensorflow as tf
 from log_metrics_callback import MetricLogger
-from xmanager.vizier.vizier_cloud.vizier_worker import \
-    VizierWorker  # Open-source manager-Deepmind
+# from xmanager.vizier.vizier_cloud.vizier_worker import \
+#     VizierWorker  # Open-source manager-Deepmind
 
 _ScalarMetric = Union[float, int]
+
 
 
 class XManagerMetricLogger(MetricLogger):
