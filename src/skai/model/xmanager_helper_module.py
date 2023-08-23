@@ -7,22 +7,8 @@ from typing import Any, Dict, Optional
 from google.cloud import aiplatform_v1beta1 as aip
 
 """
-Importing xm from XManager in python 3.8 throws an error related to asyncio, traceback below.
-
->>> from xmanager import xm
-Traceback (most recent call last):
-  File "<stdin>", line 1, in <module>
-  File "/Users/miniforge3/envs/py38/lib/python3.8/site-packages/xmanager/xm/__init__.py", line 21, in <module>
-    from xmanager.xm.core import *
-  File "/Users/miniforge3/envs/py38/lib/python3.8/site-packages/xmanager/xm/core.py", line 531, in <module>
-    class Experiment(abc.ABC):
-  File "/Users/miniforge3/envs/py38/lib/python3.8/site-packages/xmanager/xm/core.py", line 661, in Experiment
-    ) -> asyncio.Future[ExperimentUnit]:
-TypeError: 'type' object is not subscriptable
-
-
-Code in this module is adapted from the XManager repo as a temporary workaround for this issue.
-Code ref: https://github.com/deepmind/xmanager/tree/main/xmanager/vizier/vizier_cloud
+Code in this module is adapted from the XManager repo as a temporary workaround for TypeError when importing xm from xmanager in python 3.8.
+Code source: https://github.com/deepmind/xmanager/tree/main/xmanager/vizier/vizier_cloud
 """
 
 _DEFAULT_LOCATION = 'us-central1'
