@@ -97,7 +97,7 @@ def _get_dataflow_container_image() -> Optional[str]:
     return f'gcr.io/skai-project-388314/skai-inference/dataflow_py_{py_version}_image'
 
   raise ValueError(
-      f'Dataflow SDK supports Python versions 3.7-3.11, not {py_version}'
+      f'Dataflow SDK supports Python versions 3.8-3.11, not {py_version}'
   )
 
 

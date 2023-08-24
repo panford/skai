@@ -42,7 +42,6 @@ xmanager launch src/skai/model/xm_launch_single_model_vertex.py -- \
     --config.data.tfds_dataset_name=skai_dataset \
     --config.data.tfds_data_dir=gs://skai-data/hurricane_ian \
     --config.output_dir=gs://skai-data/experiments/test_skai \
-    --config.training.num_epochs=1 \
     --experiment_name=test_skai \
     --project_path=~/path/to/skai \
     --accelerator=V100 \
@@ -74,8 +73,6 @@ gs://path/to/dataset
  experiments on.
 
  ```
-<<<<<<< HEAD
-<<<<<<< HEAD
  # Example 1
     # Each trial runs on 1 V100 GPU
  ...
@@ -92,32 +89,7 @@ gs://path/to/dataset
    """
  ...
     --accelerator=TPU_V2
-=======
- # Example
-    # Run experiment on 8 number of V100 GPU machines
-...
-    --accelerator=V100 
->>>>>>> 84b4da1 (Add accelerator desc to readme)
-=======
- # Example 1
-    # Each trial runs on 1 V100 GPU
-...
-    --accelerator=V100 
-    --accelerator_count=1
- ...
-
-
-# Example 2
-   """
-    Each trial runs on 8 v2 TPUs. 
-    Note that the supported "accelerator_count" for TPU_V2 and TPU_V3 is 8.
-        ref: https://github.com/deepmind/xmanager/blob/main/docs/executors.md
-   """
- ...
-    --accelerator=TPU_V2
->>>>>>> 8ae18c2 (correct accelerator comment and add example for TPUs choices)
     --accelerator_count=8
- ...
  ```
 
 Some accelerator options are listed below.
