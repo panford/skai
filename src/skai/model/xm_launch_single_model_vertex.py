@@ -232,7 +232,7 @@ def main(_) -> None:
         study_factory=NewStudy(
             study_config=get_study_config()),
         num_trials_total=100,
-        num_parallel_trial_runs=3,
+        num_parallel_trial_runs=FLAGS.accelerator_count,
     ).launch()
 
 
