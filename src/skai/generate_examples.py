@@ -13,6 +13,7 @@
 # limitations under the License.
 """Pipeline for generating tensorflow examples from satellite images."""
 
+import binascii
 import collections
 import dataclasses
 import hashlib
@@ -20,8 +21,8 @@ import itertools
 import json
 import logging
 import os
-import pathlib
 import pickle
+import struct
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import apache_beam as beam
@@ -30,6 +31,7 @@ import geopandas as gpd
 import numpy as np
 from openlocationcode import openlocationcode
 import shapely.geometry
+from skai import beam_utils
 from skai import buildings
 from skai import cloud_detector
 from skai import earth_engine
@@ -42,7 +44,6 @@ import tensorflow as tf
 Example = tf.train.Example
 Metrics = beam.metrics.Metrics
 Polygon = shapely.geometry.polygon.Polygon
-PipelineOptions = beam.options.pipeline_options.PipelineOptions
 
 # If more than this fraction of a before or after image is blank, discard this
 # example.
@@ -83,7 +84,6 @@ class ExamplesGenerationConfig:
   large_patch_size: int = 256
   resolution: float = 0.5
   output_shards: int = 20
-  dataflow_container_image: Optional[str] = None
   gdal_env: List[str] = dataclasses.field(default_factory=list)
   buildings_method: str = 'file'  # file, open_street_map, open_buildings, none
   buildings_file: Optional[str] = None
@@ -223,10 +223,11 @@ def get_building_centroids(
     NotInitializedEarthEngineError: if earth couldnot be initialized.
     NoBuildingFoundError: if no building is found in the area of interest.
   """
+  centroids = None
   if config.buildings_method == 'file':
-    return buildings.read_buildings_file(config.buildings_file, regions)
+    centroids = buildings.read_buildings_file(config.buildings_file, regions)
   elif config.buildings_method == 'open_street_map':
-    return open_street_map.get_building_centroids_in_regions(
+    centroids = open_street_map.get_building_centroids_in_regions(
         regions, config.overpass_url
     )
   elif config.buildings_method == 'open_buildings':
@@ -242,12 +243,13 @@ def get_building_centroids(
         regions, config.open_buildings_feature_collection,
         config.open_buildings_confidence, output_path
     )
-    if not centroids:
-      raise NoBuildingFoundError()
     logging.info('Open Buildings centroids saved to %s', output_path)
-    return centroids
+  else:
+    raise ValueError('Invalid value for "buildings_method" flag.')
 
-  raise ValueError('Invalid value for "buildings_method" flag.')
+  if not centroids:
+    raise NoBuildingFoundError()
+  return list(set(centroids))  # Deduplicate.
 
 
 def _to_grayscale(image: np.ndarray) -> np.ndarray:
@@ -335,6 +337,20 @@ def _make_example_id(longitude: float, latitude: float, before_image_id: str,
   serialized = pickle.dumps(
       (longitude, latitude, before_image_id, after_image_id))
   return hashlib.md5(serialized).hexdigest()
+
+
+def _make_int64_id(example_id: str) -> int:
+  """Converts 128 bit hex string into 64 bit signed integer.
+
+  Casts the first 64 bits of the hex string into an integer.
+
+  Args:
+    example_id: 128 bit hex string.
+
+  Returns:
+    64 bit signed integer.
+  """
+  return struct.unpack('<q', binascii.a2b_hex(example_id[:16]))[0]
 
 
 class GenerateExamplesFn(beam.DoFn):
@@ -426,11 +442,13 @@ class GenerateExamplesFn(beam.DoFn):
     example_id = _make_example_id(
         longitude, latitude, before_image_id, after_image_id
     )
+    int64_id = _make_int64_id(example_id)
     plus_code = openlocationcode.encode(
         latitude=latitude, longitude=longitude, codeLength=_PLUS_CODE_LENGTH
     )
     utils.add_bytes_feature('plus_code', plus_code.encode(), example)
     utils.add_bytes_feature('example_id', example_id.encode(), example)
+    utils.add_int64_feature('int64_id', int64_id, example)
     utils.add_bytes_feature(
         'pre_image_png_large', tf.io.encode_png(before_image).numpy(), example
     )
@@ -513,54 +531,6 @@ class GenerateExamplesFn(beam.DoFn):
         yield example
 
 
-def _get_setup_file_path():
-  return str(pathlib.Path(__file__).parent.parent / 'setup.py')
-
-
-def _get_dataflow_pipeline_options(
-    job_name: str, project: str, region: str, temp_dir: str,
-    dataflow_container_image: str,
-    worker_service_account: Optional[str], max_workers: int) -> PipelineOptions:
-  """Returns dataflow pipeline options.
-
-  Args:
-    job_name: Name of Dataflow job.
-    project: GCP project.
-    region: GCP region.
-    temp_dir: Temporary data location.
-    dataflow_container_image: Docker container to use.
-    worker_service_account: Email of the service account will launch workers.
-        If None, uses the project's default Compute Engine service account
-        (<project-number>-compute@developer.gserviceaccount.com).
-    max_workers: Maximum number of Dataflow workers.
-
-  Returns:
-    Dataflow options.
-  """
-  options = {
-      'job_name': job_name,
-      'project': project,
-      'region': region,
-      'temp_location': temp_dir,
-      'runner': 'DataflowRunner',
-      'experiment': 'use_runner_v2',
-      'sdk_container_image': dataflow_container_image,
-      'setup_file': _get_setup_file_path(),
-      'max_num_workers': max_workers
-  }
-  if worker_service_account:
-    options['service_account_email'] = worker_service_account
-  return PipelineOptions.from_dictionary(options)
-
-
-def _get_local_pipeline_options() -> PipelineOptions:
-  return PipelineOptions.from_dictionary({
-      'runner': 'DirectRunner',
-      'direct_num_workers': 10,
-      'direct_running_mode': 'multi_processing',
-  })
-
-
 def _coordinates_to_scalar_features(coordinates_path: str):
   coordinates = utils.read_coordinates_file(coordinates_path)
   for longitude, latitude, label, string_label in coordinates:
@@ -634,7 +604,7 @@ def _generate_examples(
   """
   scalar_features = (
       pipeline
-      | stage_prefix + 'enconde_coordinates_path' >> beam.Create(
+      | stage_prefix + 'encode_coordinates_path' >> beam.Create(
           [coordinates_path])
       | stage_prefix + 'create_scalar_features' >> beam.FlatMap(
           _coordinates_to_scalar_features))
@@ -648,25 +618,37 @@ def _generate_examples(
     # alignment algorithm at most +/-_MAX_DISPLACEMENT pixels of movement in
     # either dimension to find the best alignment.
     after_image_size += 2 * _MAX_DISPLACEMENT
-    for i, image_path in enumerate(_expand_patterns(before_image_patterns)):
-      patches = read_raster.extract_patches_from_raster(
-          pipeline, coordinates_path, image_path, large_patch_size, resolution,
-          gdal_env, f'before{i:02d}')
-      features = (
-          patches
-          | stage_prefix + f'_before{i:02d}_to_feature' >> beam.MapTuple(
-              lambda key, value: (key, _FeatureUnion(before_image=value))))
-      input_collections.append(features)
+    before_raster_paths = _expand_patterns(before_image_patterns)
+    before_patches = read_raster.extract_patches_from_rasters(
+        pipeline,
+        coordinates_path,
+        before_raster_paths,
+        large_patch_size,
+        resolution,
+        gdal_env,
+        'before',
+    )
+    before_image_features = (
+        before_patches
+        | stage_prefix + '_before_to_feature' >> beam.MapTuple(
+            lambda key, value: (key, _FeatureUnion(before_image=value))))
+    input_collections.append(before_image_features)
 
-  for i, image_path in enumerate(_expand_patterns(after_image_patterns)):
-    patches = read_raster.extract_patches_from_raster(
-        pipeline, coordinates_path, image_path, after_image_size, resolution,
-        gdal_env, f'after{i:02d}')
-    features = (
-        patches
-        | stage_prefix + f'_after{i:02d}_to_feature' >> beam.MapTuple(
-            lambda key, value: (key, _FeatureUnion(after_image=value))))
-    input_collections.append(features)
+  after_raster_paths = _expand_patterns(after_image_patterns)
+  after_patches = read_raster.extract_patches_from_rasters(
+      pipeline,
+      coordinates_path,
+      after_raster_paths,
+      after_image_size,
+      resolution,
+      gdal_env,
+      'after',
+  )
+  after_image_features = (
+      after_patches
+      | stage_prefix + '_after_to_feature' >> beam.MapTuple(
+          lambda key, value: (key, _FeatureUnion(after_image=value))))
+  input_collections.append(after_image_features)
 
   large_examples = (
       input_collections
@@ -757,19 +739,6 @@ def read_labels_file(
   return coordinates
 
 
-def get_dataflow_container_image(py_version: str) -> str:
-  """Gets default dataflow image based on Python version.
-
-  Args:
-    py_version: Python version
-  Returns:
-    Dataflow container image path.
-  """
-  if py_version in ['3.7', '3.8', '3.9', '3.10', '3.11']:
-    return f'gcr.io/disaster-assessment/dataflow_{py_version}_image:latest'
-  return None
-
-
 def parse_gdal_env(settings: List[str]) -> Dict[str, str]:
   """Parses a list of GDAL environment variable settings into a dictionary.
 
@@ -803,7 +772,6 @@ def generate_examples_pipeline(
     use_dataflow: bool,
     gdal_env: Dict[str, str],
     dataflow_job_name: Optional[str],
-    dataflow_container_image: Optional[str],
     cloud_project: Optional[str],
     cloud_region: Optional[str],
     worker_service_account: Optional[str],
@@ -827,7 +795,6 @@ def generate_examples_pipeline(
     use_dataflow: If true, run pipeline on GCP Dataflow.
     gdal_env: GDAL environment configuration.
     dataflow_job_name: Name of dataflow job.
-    dataflow_container_image: Container image to use when running Dataflow.
     cloud_project: Cloud project name.
     cloud_region: Cloud region, e.g. us-central1.
     worker_service_account: Email of service account that will launch workers.
@@ -836,19 +803,16 @@ def generate_examples_pipeline(
   """
 
   temp_dir = os.path.join(output_dir, 'temp')
-  if use_dataflow:
-    if cloud_project is None or cloud_region is None:
-      raise ValueError(
-          'cloud_project and cloud_region must be specified when using '
-          'Dataflow.')
-    pipeline_options = _get_dataflow_pipeline_options(dataflow_job_name,
-                                                      cloud_project,
-                                                      cloud_region, temp_dir,
-                                                      dataflow_container_image,
-                                                      worker_service_account,
-                                                      max_workers)
-  else:
-    pipeline_options = _get_local_pipeline_options()
+  pipeline_options = beam_utils.get_pipeline_options(
+      use_dataflow,
+      dataflow_job_name,
+      cloud_project,
+      cloud_region,
+      temp_dir,
+      max_workers,
+      worker_service_account,
+      None
+  )
 
   coordinates_path = os.path.join(temp_dir, 'coordinates')
   if unlabeled_coordinates:

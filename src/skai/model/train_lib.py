@@ -8,20 +8,20 @@ and evaluating on provided eval datasets.
 
 import itertools
 import os
-from importlib import import_module
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
-import metrics as metrics_lib
-import numpy as np
-import tensorflow as tf
 from absl import logging
-from log_metrics_callback import LogMetricsCallback
-
+import numpy as np
 from skai.model import data
+from skai.model import log_metrics_callback
+from skai.model import metrics as metrics_lib
 from skai.model import models
+from skai.model import xmanager_external_metric_logger
+
+import tensorflow as tf
 
 
 @tf.keras.saving.register_keras_serializable('two_headed_output_model')
@@ -385,7 +385,7 @@ def create_callbacks(
     vizier_trial_name: str = None,
     batch_size: Optional[int] = 64,
     num_train_examples: Optional[int] = None,
-    is_vertex: bool = False,
+    is_vertex: bool = False
 ) -> List[tf.keras.callbacks.Callback]:
   """Creates callbacks, such as saving model checkpoints, for training.
 
@@ -395,8 +395,10 @@ def create_callbacks(
     save_best_model: Boolean for whether or not to save best model.
     early_stopping: Boolean for whether or not to use early stopping during
       training.
+    vizier_trial_name: Vizier trial name.
     batch_size: Optional integer for batch size.
     num_train_examples: Optional integer for total number of training examples.
+    is_vertex: Set to true if training on VertexAI.
 
   Returns:
     List of callbacks.
@@ -435,18 +437,17 @@ def create_callbacks(
     )
     callbacks.append(early_stopping_callback)
 
-  xmanager_callback_cls = (
-        import_module('xmanager_external_metric_logger').XManagerMetricLogger
-        if is_vertex
-        else import_module('xmanager_internal_metric_logger').XManagerMetricLogger
-  )
-  hyperparameter_tuner_callback = LogMetricsCallback(
-      [xmanager_callback_cls(vizier_trial_name)],
-      batch_size * 2,
-      batch_size,
-      num_train_examples,
-  )
-  callbacks.append(hyperparameter_tuner_callback)
+  if is_vertex:
+    metric_logger = xmanager_external_metric_logger.XMangerMetricLogger(
+        vizier_trial_name)
+    hyperparameter_tuner_callback = log_metrics_callback.LogMetricsCallback(
+        [metric_logger],
+        batch_size * 2,
+        batch_size,
+        num_train_examples,
+    )
+    callbacks.append(hyperparameter_tuner_callback)
+
   return callbacks
 
 
@@ -508,6 +509,7 @@ def train_ensemble(
     save_model_checkpoints: Boolean for saving checkpoints during training.
     early_stopping: Boolean for early stopping during training.
     example_id_to_bias_table: Hash table mapping example ID to bias label.
+    is_vertex: Set to true if training on VertexAI.
 
   Returns:
     List of trained models and, optionally, predictions.
@@ -876,8 +878,8 @@ def train_and_evaluate(
     ensemble_dir: Optional[str] = '',
     example_id_to_bias_table: Optional[tf.lookup.StaticHashTable] = None,
     vizier_trial_name: str = None,
-    is_vertex:bool = False
-    ):
+    is_vertex: bool = False
+):
   """Performs the operations of training, optionally ensembling, and evaluation.
 
   Args:
@@ -895,6 +897,8 @@ def train_and_evaluate(
     ensemble_dir: Optional string for a directory that stores trained model
       checkpoints. If specified, will load the models from directory.
     example_id_to_bias_table: Lookup table mapping example ID to bias label.
+    vizier_trial_name: Vizier trial name.
+    is_vertex: Set to true if training on VertexAI.
 
   Returns:
     Trained Model(s)
