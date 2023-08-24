@@ -9,7 +9,7 @@ import os
 from absl import app, flags
 from xmanager import xm
 from xmanager import xm_local
-from xmanager_helper_functions import VizierExploration, NewStudy
+from xmanager_helper_module import VizierExploration, NewStudy
 from ml_collections import config_flags
 from google.cloud import aiplatform_v1beta1 as aip
 from docker_instructions import get_docker_instructions
@@ -231,7 +231,7 @@ def main(_) -> None:
         ),
         study_factory=NewStudy(
             study_config=get_study_config()),
-        num_trials_total=10,
+        num_trials_total=100,
         num_parallel_trial_runs=3,
     ).launch()
 
