@@ -21,11 +21,6 @@ class StudyFactory(abc.ABC):
   num_trials_total: int
   display_name: str
 
-  # TODO: Once vertex pyvizier is available, we should replace
-  # aip.StudySpec with it.
-  # display_name and num_trials_total are supposed to be set into the study
-  # config, which is not supported by aip.StudySpec currently. But should be
-  # settable when pyvizier.StudyConfig is available.
   def __init__(
       self,
       study_config: aip.StudySpec,
@@ -54,10 +49,6 @@ class NewStudy(StudyFactory):
   project: str
   location: str
 
-  # `num_trials_total` is a required field. Default it to 0 to unbreak the
-  # soon-to-deprecate VizierExploration users.
-  # `display_name` is optional for user to customize, if not set, XM will
-  # set it with experiment information
   def __init__(
       self,
       study_config: aip.StudySpec,
@@ -123,8 +114,6 @@ class VizierController:
         if not work_unit_updater.completed:
           work_unit_updater.check_for_completion()
 
-      # 2. TODO: Return by Vizier's indication that study is done
-      # when such API is ready on Vizier side.
       num_exisiting_work_units = len(self._work_unit_updaters)
       num_completed_work_units = sum(
           [wuu.completed for wuu in self._work_unit_updaters]
@@ -182,8 +171,6 @@ class VizierController:
         async def gen_work_unit(work_unit, **kwargs): #: xm.WorkUnit, **kwargs):
           await self._work_unit_generator(work_unit, kwargs)
 
-          # TODO: Add an utility to handle logging conditionally
-          # (use print when run local otherwise logging.info.)
           print(
               f'Work unit (index: {index}, '
               f'id: {work_unit.work_unit_id}) created. \n'
@@ -230,7 +217,6 @@ class WorkUnitVizierUpdater:
         f' {self._work_unit.work_unit_id}.\n'
     )
 
-    # TODO: Add infeasible_reason when available.
     if not self.work_unit_status().is_active:
       self._complete_trial(self._trial)
       self.completed = True
@@ -261,7 +247,6 @@ class WorkUnitVizierUpdater:
     )
     print(f'Trial {trial.name} is completed\n')
 
-# TODO: Add vizier_controller as auxiliary Job generator.
 class VizierExploration:
   """An API for launching experiment as a Vizier-based Exploration."""
 
@@ -301,12 +286,6 @@ class VizierExploration:
     )
 
   def _to_job_params(self, vizier_params: Dict[str, Any]) -> Dict[str, Any]:
-    # TODO: unflatten parameters for JobGroup case (currently this
-    # works for xm.Job).
-    # For example: transform
-    # {'learner.args.learning_rate': 0.1}
-    # to
-    # {'learner': {'args': {'learning_rate': 0.1}}}
     return {'args': vizier_params}
 
   def launch(self, **kwargs) -> None:

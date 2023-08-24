@@ -2,13 +2,9 @@
 
 from typing import Union
 from log_metrics_callback import MetricLogger
-from xmanager_helper_functions import VizierWorker
-# from xmanager.vizier.vizier_cloud.vizier_worker import \
-#     VizierWorker  # Open-source manager-Deepmind
+from xmanager_helper_module import VizierWorker
 
 _ScalarMetric = Union[float, int]
-
-
 
 class XManagerMetricLogger(MetricLogger):
     """Class for logging metrics to XManager."""
