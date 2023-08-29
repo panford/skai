@@ -7,8 +7,11 @@ from typing import Any, Dict, Optional
 from google.cloud import aiplatform_v1beta1 as aip
 
 """
-Code in this module is adapted from the XManager repo as a temporary workaround for TypeError when importing xm from xmanager in python 3.8.
-Code source: https://github.com/deepmind/xmanager/tree/main/xmanager/vizier/vizier_cloud
+Code in this module is adapted from the XManager 
+repo as a temporary workaround for TypeError when 
+importing xm from xmanager in python 3.8.
+Code source: 
+  https://github.com/deepmind/xmanager/tree/main/xmanager/vizier/vizier_cloud
 """
 
 _DEFAULT_LOCATION = 'us-central1'
@@ -52,7 +55,7 @@ class NewStudy(StudyFactory):
   def __init__(
       self,
       study_config: aip.StudySpec,
-      num_trials_total: int = 0,
+      num_trials_total: int,
       display_name: Optional[str] = None,
       project: Optional[str] = None,
       location: Optional[str] = None,
@@ -107,7 +110,9 @@ class VizierController:
     self._work_unit_updaters = []
 
   def run(self, poll_frequency_in_sec: float = 60) -> None:
-    """Peridically check and sync status between vizier and work units and create new work units when needed."""
+    """Peridically check and sync status between vizier and 
+    work units and create new work units when needed.
+    """
     while True:
       # 1. Complete trial for completed work unit; Early stop first if needed.
       for work_unit_updater in self._work_unit_updaters:
@@ -131,7 +136,10 @@ class VizierController:
       time.sleep(poll_frequency_in_sec)
 
   def _launch_new_work_units(self) -> None:
-    """Get hyperparmeter suggestions from Vizier and assign to new work units to run."""
+    """
+    Get hyperparmeter suggestions from Vizier and assign 
+    to new work units to run.
+    """
     # 1. Compute num of work units to create next.
     num_existing_work_units = len(self._work_unit_updaters)
     num_running_work_units = len(
@@ -191,7 +199,10 @@ class VizierController:
 
 
 class WorkUnitVizierUpdater:
-  """An updater for syncing completion state between work unit and vizier trial."""
+  """
+  An updater for syncing completion state between 
+  work unit and vizier trial.
+  """
 
   def __init__(
       self,
