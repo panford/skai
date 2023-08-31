@@ -93,11 +93,11 @@ def _get_dataflow_container_image() -> Optional[str]:
     Dataflow container image path.
   """
   py_version = '.'.join(platform.python_version().split('.')[:2])
-  if py_version in ['3.8', '3.9', '3.10', '3.11']:
+  if py_version in ['3.10', '3.11']:
     return f'gcr.io/skai-project-388314/skai-inference/dataflow_py_{py_version}_image'
 
   raise ValueError(
-      f'Dataflow SDK supports Python versions 3.8-3.11, not {py_version}'
+      f'Dataflow SDK supports Python versions 3.10-3.11, not {py_version}'
   )
 
 
