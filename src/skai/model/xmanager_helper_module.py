@@ -3,7 +3,7 @@ import time
 import abc
 from absl import logging
 from xmanager.cloud import auth
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from google.cloud import aiplatform_v1beta1 as aip
 
 """
@@ -56,9 +56,9 @@ class NewStudy(StudyFactory):
       self,
       study_config: aip.StudySpec,
       num_trials_total: int,
-      display_name: Optional[str] = None,
-      project: Optional[str] = None,
-      location: Optional[str] = None,
+      display_name = None,
+      project = None,
+      location = None,
   ) -> None:
     self.project = project or auth.get_project_name()
     self.location = location or _DEFAULT_LOCATION
@@ -80,8 +80,8 @@ class VizierController:
 
   def __init__(
       self,
-      experiment, #: xm.Experiment,
-      work_unit_generator, #: Callable[[xm.WorkUnit, Dict[str, Any]], Any],
+      experiment, 
+      work_unit_generator, 
       vizier_client: aip.VizierServiceClient,
       study_name: str,
       num_work_units_total: int,
@@ -175,8 +175,8 @@ class VizierController:
 
       print(f'Creating work unit (index: {i})... \n')
 
-      def create_gen(index: int, trial: aip.Trial): # -> xm.JobGeneratorType:
-        async def gen_work_unit(work_unit, **kwargs): #: xm.WorkUnit, **kwargs):
+      def create_gen(index: int, trial: aip.Trial): 
+        async def gen_work_unit(work_unit, **kwargs):
           await self._work_unit_generator(work_unit, kwargs)
 
           print(
@@ -246,7 +246,7 @@ class WorkUnitVizierUpdater:
       print(f'Work unit {self._work_unit.work_unit_id} is still running.\n')
 
   def _complete_trial(
-      self, trial: aip.Trial, infeasible_reason: Optional[str] = None
+      self, trial: aip.Trial, infeasible_reason = None
   ) -> None:
     """Complete a trial."""
     self._vizier_client.complete_trial(
@@ -345,7 +345,7 @@ class VizierWorker:
     )
     logging.info('Step %d Metric %s is reported', step, metrics)
 
-  def complete_trial(self, infeasible_reason: Optional[str] = None) -> None:
+  def complete_trial(self, infeasible_reason: str = None) -> None:
     """Complete a trial."""
     self._vizier_client.complete_trial(
         request=aip.CompleteTrialRequest(
